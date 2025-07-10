@@ -6,10 +6,10 @@ import re
 
 ################## define variables ##################
 
-source_dir_parent = "/data/pt_02262/data/TH_bids/zzz_test_qsmxt"
-temp_dir_parent = "/data/pt_02262/data/TH_bids/zzz_test_qsmxt"
-subjects_list = ["003", "004"] ### TODO: find all "sub-*" and find all "ses-*" in the directory
-sessions_list = ["01", "02"]
+source_dir_parent = "/data/pt_02262/data/TH_bids/testdata_Taechang/LORAKS"
+temp_dir_parent = "/data/pt_02262/data/TH_bids/testdata_Taechang/LORAKS/derivatives/qsmxt"
+subjects_list = ["001", "002", "004"] ### TODO: find all "sub-*" and find all "ses-*" in the directory
+sessions_list = ["04"]
 
 #### TODO ####
 # typical naming: sub-1_acq-mygrea_run-1_echo-1_part-mag_MEGRE.nii
@@ -50,13 +50,15 @@ def create_renamed_symlinks(session_dir, temp_dir, contrasts, suffix):
             
             for idx, contr in enumerate(contrasts):
                 if contr.casefold() in lower_fname:
-
-                    if suffix != "MEGRE":
-                        # Replace suffix by "MEGRE"
-                        new_fname = re.sub(suffix, "MEGRE", fname, flags=re.IGNORECASE)
-                    else:
-                        new_fname = fname
                     
+                    ### necessary in older versions of qsmxt
+                    # if suffix != "MEGRE":
+                    #     # Replace suffix by "MEGRE"
+                    #     new_fname = re.sub(suffix, "MEGRE", fname, flags=re.IGNORECASE)
+                    # else:
+                    #     new_fname = fname
+                    new_fname = fname
+
                     # Insert "_run-*" after whichever contrast is found 
                     # (only if multiple contrasts are specified)
                     if len(contrasts) > 1:
