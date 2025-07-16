@@ -8,24 +8,24 @@ FSL_VERSION = "6.0.7.11"
 FREESURFER_VERSION = "7.4.1"
 
 # Define subject and session
-subject = "sub-003"
-session_3T = "ses-04"
-session_7T = "ses-03" # reference (7T): ses-04 for sub-001 and sub-002, ses-03 for sub-003
+subject = "sub-001"
+session_3T = "ses-08"
+session_7T = "ses-04" # reference (7T): ses-04 for sub-001 and sub-002, ses-03 for sub-003
 
 include_alignStep = True
 
 
 ############## Define file paths for 3T and 7T MRI
-pdw_3T_path = Path(f"/data/pt_02262/data/TH_bids/testdata_Taechang/dcm_imported/{subject}/{session_3T}/anat")
-pdw_3T_pattern = f"{subject}_{session_3T}_acq-PDw*echo*1_*part-mag*.nii"
+# pdw_3T_path = Path(f"/data/pt_02262/data/TH_bids/testdata_Taechang/dcm_imported/{subject}/{session_3T}/anat")
+pdw_3T_path = Path(f"/data/pt_02262/data/TH_bids/bids/derivatives/LCPCA_distCorr/{subject}/{session_3T}/anat")
+pdw_3T_pattern = f"{subject}_{session_3T}_acq-PDw*echo-01_*part-mag*.nii"
 pdw_3T_files = list(pdw_3T_path.glob(pdw_3T_pattern))
 if not pdw_3T_files:
     raise FileNotFoundError(f"No file matching pattern {pdw_3T_pattern} found in {pdw_3T_path}")
 
-pdw_7T_path = Path(f"/data/pt_02262/data/TH_bids/testdata_Taechang/LORAKS/{subject}/{session_7T}/anat")
+# pdw_7T_path = Path(f"/data/pt_02262/data/TH_bids/testdata_Taechang/LORAKS/{subject}/{session_7T}/anat")
+pdw_7T_path = Path(f"/data/pt_02262/data/TH_bids/bids/derivatives/LORAKS_LCPCA_distCorr/{subject}/{session_7T}/anat")
 pdw_7T_pattern = f"{subject}_{session_7T}_acq-PDw_rec-loraksRsos*echo-01*part-mag*.nii"
-# pdw_7T_path = Path(f"/data/pt_02262/data/TH_bids/bids/{subject}/{session_7T}/anat")
-# pdw_7T_pattern = f"{subject}_{session_7T}_acq-PDw*echo-1_*.nii"
 pdw_7T_files = list(pdw_7T_path.glob(pdw_7T_pattern))
 if not pdw_7T_files:
     raise FileNotFoundError(f"No file matching pattern {pdw_7T_pattern} found in {pdw_7T_path}")
@@ -34,7 +34,8 @@ pdw_7T = str(pdw_7T_file)
 
 
 ############# Define output directory and create it if it doesn't exist
-output_dir = Path(f"/data/pt_02262/data/TH_bids/testdata_Taechang/dcm_imported/derivatives/coreg_3T_to_7T/{subject}/{session_3T}/intermediate")
+# output_dir = Path(f"/data/pt_02262/data/TH_bids/testdata_Taechang/dcm_imported/derivatives/coreg_3T_to_7T/{subject}/{session_3T}/intermediate")
+output_dir = Path(f"/data/pt_02262/data/TH_bids/bids/derivatives/coreg_3T_to_7T/flirt_affine/{subject}/{session_3T}/intermediate")
 output_dir.mkdir(parents=True, exist_ok=True)
 
 

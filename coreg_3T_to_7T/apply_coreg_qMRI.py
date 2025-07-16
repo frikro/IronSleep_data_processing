@@ -7,19 +7,21 @@ import os
 FSL_VERSION = "6.0.7.11"
 
 # Define subject, session, and input files
-subject = "sub-003"
-session_3T = "ses-04"
-session_7T = "ses-03" # reference (7T): ses-04 for sub-001 and sub-002, ses-03 for sub-003
+subject = "sub-001"
+session_3T = "ses-08"
+session_7T = "ses-04" # reference (7T): ses-04 for sub-001 and sub-002, ses-03 for sub-003
 
 include_alignStep = True
 
 # Define input directory and files to process
-input_dir = Path(f"/data/pt_02262/data/TH_bids/testdata_Taechang/dcm_imported/derivatives/qMRI/{subject}/{session_3T}/anat")
+# input_dir = Path(f"/data/pt_02262/data/TH_bids/testdata_Taechang/dcm_imported/derivatives/qMRI/{subject}/{session_3T}/anat")
+input_dir = Path(f"/data/pt_02262/data/TH_bids/bids/derivatives/qMRI/{subject}/{session_3T}/anat")
 input_files_patterns = [
     f"{subject}_{session_3T}_R1map.nii",
     f"{subject}_{session_3T}_R2starmap.nii",
     f"{subject}_{session_3T}_MTsat.nii",
-    f"{subject}_{session_3T}_PDmap.nii"
+    f"{subject}_{session_3T}_PDmap.nii",
+    # "fit_r2.nii"
 ]
 
 input_files = []
@@ -30,7 +32,8 @@ if not input_files:
     raise FileNotFoundError(f"No files matching patterns {input_files_patterns} found in {input_dir}")
 
 # Define coregistration matrix and output directory
-coreg_matrix_dir = Path(f"/data/pt_02262/data/TH_bids/testdata_Taechang/dcm_imported/derivatives/coreg_3T_to_7T/{subject}/{session_3T}/intermediate")
+# coreg_matrix_dir = Path(f"/data/pt_02262/data/TH_bids/testdata_Taechang/dcm_imported/derivatives/coreg_3T_to_7T/{subject}/{session_3T}/intermediate")
+coreg_matrix_dir = Path(f"/data/pt_02262/data/TH_bids/bids/derivatives/coreg_3T_to_7T/flirt_affine/{subject}/{session_3T}/intermediate")
 coreg_matrix_pattern = f"coreg_pdw_3T{session_3T}_to_7T{session_7T}_run-*.mat"
 coreg_matrices = list(coreg_matrix_dir.glob(coreg_matrix_pattern))
 if not coreg_matrices:
@@ -44,7 +47,8 @@ if not reference_file_7T:
 reference_file_7T = str(reference_file_7T[0])  # Assuming only one reference file is present
 
 
-output_dir = Path(f"/data/pt_02262/data/TH_bids/testdata_Taechang/dcm_imported/derivatives/coreg_3T_to_7T/{subject}/{session_3T}")
+# output_dir = Path(f"/data/pt_02262/data/TH_bids/testdata_Taechang/dcm_imported/derivatives/coreg_3T_to_7T/{subject}/{session_3T}")
+output_dir = Path(f"/data/pt_02262/data/TH_bids/bids/derivatives/coreg_3T_to_7T/flirt_affine/{subject}/{session_3T}")
 output_dir.mkdir(parents=True, exist_ok=True)
 
 # Apply coregistration matrix to each input file
