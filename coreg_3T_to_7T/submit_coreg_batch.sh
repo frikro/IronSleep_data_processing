@@ -154,6 +154,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Auto-adjust align step based on ANTS usage
+if [[ "$use_ants" == "true" ]]; then
+    include_align_step=false
+    echo "ANTS registration selected - initial alignment step disabled"
+fi
+
 # Validation
 if [[ -z "$pdw_3T_directory" ]]; then
     echo "Error: 3T PDw directory must be specified"
