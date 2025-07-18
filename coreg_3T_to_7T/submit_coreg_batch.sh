@@ -18,7 +18,7 @@ OPTIONS:
                                              If not specified, all 3T sessions found for each subject will be processed
     -refSes REFERENCE_SESSION | --reference-session REFERENCE_SESSION: 7T sessions to use as reference (e.g., ses-04)
                                                                         If not specified, default reference sessions will be used:
-                                                                        sub-001, sub-002: ses-04; sub-003: ses-03
+                                                                        sub-001, sub-002: ses-04; sub-003: ses-03, sub-005: ses-05
     -t SECONDS | --delay SECONDS: delay between job submissions in seconds (default: 1)
     --no-align: skip the initial alignment step (FLIRT applyxfm with usesqform)
     --use-ants: use ANTS SyN (affine + nonlinear) registration instead of FLIRT (affine only)
@@ -204,8 +204,12 @@ get_default_reference_session() {
         "sub-003")
             echo "ses-03"
             ;;
+        "sub-005")
+            echo "ses-05" 
+            ;;
         *)
-            echo "ses-04"  # default fallback
+            echo "Error: No default reference session defined for $subject. Please specify a reference session with -refSes option." >&2
+            exit 1
             ;;
     esac
 }
@@ -319,7 +323,7 @@ echo "3T sessions to process: ${session_3T_array[*]}"
 if [[ -n "$reference_session" ]]; then
     echo "7T reference session (specified): $reference_session"
 else
-    echo "7T reference session: Using defaults per subject (sub-001/sub-002: ses-04, sub-003: ses-03)"
+    echo "7T reference session: Using defaults per subject (sub-001/sub-002: ses-04, sub-003: ses-03, sub-005: ses-05)"
 fi
 echo "Include alignment step: $include_align_step"
 echo "Use ANTS registration: $use_ants"
