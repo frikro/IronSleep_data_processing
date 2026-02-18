@@ -3,7 +3,8 @@
 Robust pipeline for coregistering 3T to 7T MRI data, including qMRI map transformation, using SLURM batch scripts.
 
 - Coregistration of a 3T PDw echo-1 to the corresponding LORAKS-reconstructed echo-1 of a 7T session 
-- Apply the calculated transformation to the 3T qMRI maps
+- Apply the calculated transformation to the 3T qMRI maps (R1, R2*, MTsat, PD)
+- Optionally also apply the transformation to QSM (susceptibility), R2, and R2' (R2prime) maps
 - Reason: use MASSP segmentation of the 7T data for the 3T images
 
 ## Features:
@@ -11,7 +12,7 @@ Robust pipeline for coregistering 3T to 7T MRI data, including qMRI map transfor
 - **Auto-discovery**: Automatically discovers subjects and sessions from BIDS-like directory structures  
 - **Robust error handling**: Comprehensive validation and error reporting
 - **Batch processing**: SLURM-based batch job submission for multiple subjects/sessions
-- **qMRI integration**: Automatic application of transforms to all qMRI maps after coregistration
+- **Multi-modality support**: Applies transforms to qMRI maps, and optionally to QSM, R2, and R2' maps
 
 ## Usage:
 
@@ -47,6 +48,17 @@ Robust pipeline for coregistering 3T to 7T MRI data, including qMRI map transfor
     /data/pdw_3T /data/pdw_7T /data/qmri_3T /data/output
 ```
 
+### Including QSM, R2, and R2' data:
+```bash
+# Also coregister QSM, R2, and R2prime maps
+./submit_coreg_batch.sh \
+    -sub "sub-001" -ses3T "ses-05" -refSes "ses-04" \
+    --qsm-dir /data/derivatives/QSM \
+    --r2-dir /data/derivatives/R2 \
+    --r2prime-dir /data/derivatives/R2prime \
+    /data/pdw_3T /data/pdw_7T /data/qmri_3T /data/output
+```
+
 ### Options:
 - `--use-ants`: Use ANTS SyN (affine + nonlinear) instead of FLIRT (affine only)
 - `--no-align`: Skip initial FLIRT alignment step
@@ -55,6 +67,9 @@ Robust pipeline for coregistering 3T to 7T MRI data, including qMRI map transfor
 - `-ses3T`: Comma-separated list of 3T sessions (auto-discovered if not specified)  
 - `-refSes`: 7T reference session (defaults: sub-001/002→ses-04, sub-003→ses-03)
 - `-t`: Delay between job submissions in seconds (default: 1)
+- `--qsm-dir`: (optional) Directory containing 3T QSM data (expects `<dir>/<sub>/<ses>/anat/coreg_toPDw/*_mean_Chimap.nii*`)
+- `--r2-dir`: (optional) Directory containing 3T R2 data (expects `<dir>/<sub>/<ses>/anat/*R2map.nii*`)
+- `--r2prime-dir`: (optional) Directory containing 3T R2' data (expects `<dir>/<sub>/<ses>/anat/*R2primemap.nii*`)
 
 ## Registration Methods:
 
@@ -74,15 +89,21 @@ Robust pipeline for coregistering 3T to 7T MRI data, including qMRI map transfor
 output_directory/
 ├── sub-XXX/
 │   └── ses-XX/
-│       ├── intermediate/           # Coregistration outputs
+│       ├── intermediate/                # Coregistration outputs
 │       │   ├── *_synthstrip.nii.gz      # Brain-extracted images
-│       │   ├── coreg_pdw_*.nii.gz        # Coregistered PDw
-│       │   ├── coreg_pdw_*.mat           # FLIRT transform matrix
-│       │   ├── ants_*Warped.nii.gz       # ANTS warped image
-│       │   ├── ants_*0GenericAffine.mat  # ANTS affine transform
-│       │   ├── ants_*1Warp.nii.gz        # ANTS nonlinear warp
-│       │   └── ants_*1InverseWarp.nii.gz # ANTS inverse warp
-│       └── *_coreg.nii.gz          # Final qMRI maps in 7T space
+│       │   ├── coreg_pdw_*.nii.gz       # Coregistered PDw
+│       │   ├── coreg_pdw_*.mat          # FLIRT transform matrix
+│       │   ├── ants_*Warped.nii.gz      # ANTS warped image
+│       │   ├── ants_*0GenericAffine.mat # ANTS affine transform
+│       │   ├── ants_*1Warp.nii.gz       # ANTS nonlinear warp
+│       │   └── ants_*1InverseWarp.nii.gz# ANTS inverse warp
+│       ├── *_R1map_coreg.nii.gz         # Coregistered qMRI maps
+│       ├── *_R2starmap_coreg.nii.gz
+│       ├── *_MTsat_coreg.nii.gz
+│       ├── *_PDmap_coreg.nii.gz
+│       ├── *_Chimap_coreg.nii.gz        # Coregistered QSM (if --qsm-dir specified)
+│       ├── *_R2map_coreg.nii.gz         # Coregistered R2 (if --r2-dir specified)
+│       └── *_R2primemap_coreg.nii.gz    # Coregistered R2' (if --r2prime-dir specified)
 ```
 
 ## Pipeline Steps:
@@ -92,6 +113,7 @@ output_directory/
    - FLIRT: 12-DOF affine with mutual information
    - ANTS: Rigid → Affine → SyN nonlinear with mutual information + cross-correlation
 4. **qMRI Application**: Apply transforms to R1map, R2starmap, MTsat, PDmap
+5. **Optional Modalities**: If specified, apply the same transforms to QSM (*mean_Chimap*), R2 (*R2map*), and/or R2' (*R2primemap*) maps
 
 ## Requirements:
 - FSL 6.0.6 (via SCWRAP)

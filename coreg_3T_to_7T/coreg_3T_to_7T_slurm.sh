@@ -7,17 +7,28 @@
 #SBATCH -o /data/u_kuegler_software/git/ironsleep_data_processing/coreg_3T_to_7T/logs/%j.out	# redirect the output
 #
 
-# Script for coregistering 3T to 7T MRI data using FLIRT or ANTS
+# Script for coregistering 3T to 7T MRI data using FLIRT or ANTS.
+#
+# The script performs the following steps:
+#   1. Finds and preprocesses 3T and 7T PDw images with SynthStrip (brain extraction)
+#   2. Optionally applies initial alignment using FLIRT -applyxfm -usesqform
+#   3. Calculates the coregistration transform (FLIRT affine or ANTS SyN)
+#   4. Applies the transform to qMRI maps (R1map, R2starmap, MTsat, PDmap)
+#   5. Optionally applies the transform to QSM, R2, and/or R2' maps (if directories are specified)
+#
 # Arguments:
-# $1: subject (e.g., sub-001)
-# $2: session_3T (e.g., ses-05)
-# $3: reference_session (e.g., ses-04)
-# $4: 3Tpdw_directory (bids directory containing 3T Pdw files)
-# $5: 7Tpdw_directory (bids directory containing 7T Pdw files)
-# $6: 3Tqmri_directory (bids directory containing 3T qMRI files)
-# $7: output_dir (base output directory)
-# $8: include_align_step (true/false)
-# $9: use_ants (true/false) - if true, use ANTS SyN instead of FLIRT
+# $1:  subject (e.g., sub-001)
+# $2:  session_3T (e.g., ses-05)
+# $3:  reference_session (e.g., ses-04)
+# $4:  3Tpdw_directory (BIDS directory containing 3T PDw files)
+# $5:  7Tpdw_directory (BIDS directory containing 7T PDw files)
+# $6:  3Tqmri_directory (BIDS directory containing 3T qMRI files)
+# $7:  output_dir (base output directory)
+# $8:  include_align_step (true/false)
+# $9:  use_ants (true/false) - if true, use ANTS SyN instead of FLIRT
+# $10: qsm_directory (optional, BIDS directory containing 3T QSM files; expects .../anat/coreg_toPDw/*_mean_Chimap.nii*)
+# $11: r2_directory (optional, BIDS directory containing 3T R2 files; expects .../anat/*R2map.nii*)
+# $12: r2prime_directory (optional, BIDS directory containing 3T R2' files; expects .../anat/*R2primemap.nii*)
 
 subject=$1
 session_3T=$2
@@ -28,6 +39,9 @@ qmri_3T_directory=$6
 output_dir=$7
 include_align_step=$8
 use_ants=$9
+qsm_directory=${10}
+r2_directory=${11}
+r2prime_directory=${12}
 
 # Define FSL and FreeSurfer versions
 FREESURFER_ENV="SCWRAP freesurfer 7.4.1"
@@ -44,6 +58,9 @@ echo "3T QMRI Directory: $qmri_3T_directory"
 echo "Output directory: $output_dir"
 echo "Include align step: $include_align_step"
 echo "Use ANTS SyN: $use_ants"
+if [[ -n "$qsm_directory" ]]; then echo "QSM Directory: $qsm_directory"; fi
+if [[ -n "$r2_directory" ]]; then echo "R2 Directory: $r2_directory"; fi
+if [[ -n "$r2prime_directory" ]]; then echo "R2prime Directory: $r2prime_directory"; fi
 echo "=================================="
 
 # Define file paths for 3T and 7T MRI
@@ -287,50 +304,30 @@ echo "All outputs saved in: $intermediate_dir"
 echo "====================================="
 
 
-echo ""
-echo "=== Applying Co-registration to 3T qMRI files ==="
+# ============================================================
+# Function to apply coregistration to a set of NIfTI files
+# Usage: apply_coreg_to_files <label> <input_dir> <file_patterns...>
+# ============================================================
+apply_coreg_to_files() {
+    local label="$1"
+    local input_dir="$2"
+    shift 2
+    local file_patterns=("$@")
+    local coreg_out_dir="${output_dir}/${subject}/${session_3T}"
+    mkdir -p "$coreg_out_dir"
 
-# Define input qMRI directory and file patterns
-qmri_input_dir="${qmri_3T_directory}/${subject}/${session_3T}/anat"
-qmri_output_dir="${output_dir}/${subject}/${session_3T}"
-mkdir -p "$qmri_output_dir"
+    echo ""
+    echo "=== Applying Co-registration to 3T ${label} files ==="
+    echo "Searching for ${label} files in: $input_dir"
 
-echo "Searching for qMRI files in: $qmri_input_dir"
-
-# Define qMRI file patterns to process
-qmri_patterns=(
-    "${subject}_${session_3T}_R1map.nii*"
-    "${subject}_${session_3T}_R2starmap.nii*"
-    "${subject}_${session_3T}_MTsat.nii*"
-    "${subject}_${session_3T}_PDmap.nii*"
-)
-
-# Find all qMRI files
-qmri_files=()
-for pattern in "${qmri_patterns[@]}"; do
-    while IFS= read -r -d '' file; do
-        qmri_files+=("$file")
-    done < <(find "$qmri_input_dir" -name "$pattern" -print0 2>/dev/null)
-done
-
-if [[ ${#qmri_files[@]} -eq 0 ]]; then
-    echo "WARNING: No qMRI files found matching patterns in $qmri_input_dir"
-    echo "Patterns searched:"
-    for pattern in "${qmri_patterns[@]}"; do
-        echo "  $pattern"
-    done
-    echo "Skipping qMRI coregistration application."
-else
-    echo "Found ${#qmri_files[@]} qMRI files to process"
-    
     # Check if coregistration transforms exist
     if [[ "$transform_type" == "ants" ]]; then
         if [[ ! -f "$ants_affine" ]] || [[ ! -f "$ants_warp" ]]; then
             echo "ERROR: ANTS transforms not found:"
             echo "  Affine: $ants_affine"
             echo "  Warp: $ants_warp"
-            echo "Cannot apply coregistration to qMRI files."
-            exit 1
+            echo "Cannot apply coregistration to ${label} files."
+            return 1
         fi
         echo "Using ANTS transforms:"
         echo "  Affine: $ants_affine"
@@ -338,102 +335,168 @@ else
     else
         if [[ ! -f "$coreg_matrix" ]]; then
             echo "ERROR: FLIRT coregistration matrix not found: $coreg_matrix"
-            echo "Cannot apply coregistration to qMRI files."
-            exit 1
+            echo "Cannot apply coregistration to ${label} files."
+            return 1
         fi
         echo "Using FLIRT coregistration matrix: $coreg_matrix"
     fi
-    
     echo "Using 7T reference file: $pdw_7T_synthstrip"
-    
-    # Process each qMRI file
-    for qmri_file in "${qmri_files[@]}"; do
+
+    # Find files matching the given patterns
+    local found_files=()
+    for pattern in "${file_patterns[@]}"; do
+        while IFS= read -r -d '' file; do
+            found_files+=("$file")
+        done < <(find "$input_dir" -name "$pattern" -print0 2>/dev/null)
+    done
+
+    if [[ ${#found_files[@]} -eq 0 ]]; then
+        echo "WARNING: No ${label} files found matching patterns in $input_dir"
+        echo "Patterns searched:"
+        for pattern in "${file_patterns[@]}"; do
+            echo "  $pattern"
+        done
+        echo "Skipping ${label} coregistration application."
+        return
+    fi
+
+    echo "Found ${#found_files[@]} ${label} files to process"
+
+    for data_file in "${found_files[@]}"; do
         echo ""
-        echo "Processing qMRI file: $(basename "$qmri_file")"
-        
-        # Extract basename
-        qmri_basename=$(basename "$qmri_file" .nii.gz)
-        qmri_basename=$(basename "$qmri_basename" .nii)
-        
-        # Define output files
-        qmri_aligned="${qmri_output_dir}/${qmri_basename}_aligned.nii.gz"
-        qmri_coreg_output="${qmri_output_dir}/${qmri_basename}_coreg.nii.gz"
-        
+        echo "Processing ${label} file: $(basename "$data_file")"
+
+        local data_basename
+        data_basename=$(basename "$data_file" .nii.gz)
+        data_basename=$(basename "$data_basename" .nii)
+
+        local data_aligned="${coreg_out_dir}/${data_basename}_aligned.nii.gz"
+        local data_coreg_output="${coreg_out_dir}/${data_basename}_coreg.nii.gz"
+
         # Apply initial alignment if requested
         if [[ "$include_align_step" == "true" ]]; then
             echo "  Applying initial alignment..."
-            if [[ ! -f "$qmri_aligned" ]]; then
+            if [[ ! -f "$data_aligned" ]]; then
                 $FSL_ENV flirt \
-                    -in "$qmri_file" \
+                    -in "$data_file" \
                     -ref "$pdw_7T_synthstrip" \
-                    -out "$qmri_aligned" \
+                    -out "$data_aligned" \
                     -applyxfm \
                     -usesqform
-                
+
                 if [[ $? -ne 0 ]]; then
-                    echo "  ERROR: FLIRT -applyxfm failed for qMRI file $qmri_file"
+                    echo "  ERROR: FLIRT -applyxfm failed for ${label} file $data_file"
                     continue
                 fi
-                echo "  Initial alignment complete. Output saved to $qmri_aligned"
+                echo "  Initial alignment complete. Output saved to $data_aligned"
             else
-                echo "  Initial alignment output already exists: $qmri_aligned"
+                echo "  Initial alignment output already exists: $data_aligned"
             fi
-            qmri_preprocessed="$qmri_aligned"
+            local data_preprocessed="$data_aligned"
         else
             echo "  Skipping initial alignment step"
-            qmri_preprocessed="$qmri_file"
+            local data_preprocessed="$data_file"
         fi
-        
+
         # Apply coregistration transform
         echo "  Applying coregistration transform..."
-        if [[ ! -f "$qmri_coreg_output" ]]; then
+        if [[ ! -f "$data_coreg_output" ]]; then
             if [[ "$transform_type" == "ants" ]]; then
                 echo "  Using ANTS transform..."
                 $ANTS_ENV antsApplyTransforms \
                     -d 3 \
-                    -i "$qmri_preprocessed" \
+                    -i "$data_preprocessed" \
                     -r "$pdw_7T_synthstrip" \
-                    -o "$qmri_coreg_output" \
+                    -o "$data_coreg_output" \
                     -t "$ants_warp" \
                     -t "$ants_affine" \
                     --interpolation Linear
-                
+
                 if [[ $? -ne 0 ]]; then
-                    echo "  ERROR: ANTS transform application failed for $qmri_file"
+                    echo "  ERROR: ANTS transform application failed for $data_file"
                     continue
                 fi
-                echo "  ANTS transform applied successfully. Output saved to $qmri_coreg_output"
+                echo "  ANTS transform applied successfully. Output saved to $data_coreg_output"
             else
                 echo "  Using FLIRT transform..."
                 $FSL_ENV flirt \
-                    -in "$qmri_preprocessed" \
+                    -in "$data_preprocessed" \
                     -ref "$pdw_7T_synthstrip" \
                     -applyxfm \
                     -init "$coreg_matrix" \
-                    -out "$qmri_coreg_output"
-                
+                    -out "$data_coreg_output"
+
                 if [[ $? -ne 0 ]]; then
-                    echo "  ERROR: FLIRT coregistration application failed for $qmri_file"
+                    echo "  ERROR: FLIRT coregistration application failed for $data_file"
                     continue
                 fi
-                echo "  FLIRT transform applied successfully. Output saved to $qmri_coreg_output"
+                echo "  FLIRT transform applied successfully. Output saved to $data_coreg_output"
             fi
         else
-            echo "  Coregistration output already exists: $qmri_coreg_output"
+            echo "  Coregistration output already exists: $data_coreg_output"
         fi
-        
+
         echo "  ------------------------------"
     done
+
+    echo ""
+    echo "=== ${label} Coregistration Application Completed ==="
+    echo "${label} outputs saved in: $coreg_out_dir"
+    echo "=============================================="
+}
+
+
+# ============================================================
+# Apply coregistration transforms to all data modalities
+# ============================================================
+
+# Apply coregistration to qMRI files
+qmri_input_dir="${qmri_3T_directory}/${subject}/${session_3T}/anat"
+apply_coreg_to_files "qMRI" "$qmri_input_dir" \
+    "${subject}_${session_3T}_R1map.nii*" \
+    "${subject}_${session_3T}_R2starmap.nii*" \
+    "${subject}_${session_3T}_MTsat.nii*" \
+    "${subject}_${session_3T}_PDmap.nii*"
+
+# Apply coregistration to QSM files if directory specified
+if [[ -n "$qsm_directory" ]]; then
+    qsm_input_dir="${qsm_directory}/${subject}/${session_3T}/anat/coreg_toPDw"
+    if [[ -d "$qsm_input_dir" ]]; then
+        apply_coreg_to_files "QSM" "$qsm_input_dir" \
+            "${subject}_${session_3T}_mean_Chimap.nii*"
+    else
+        echo ""
+        echo "WARNING: QSM input directory not found: $qsm_input_dir"
+    fi
 fi
 
-echo ""
-echo "=== qMRI Coregistration Application Completed ==="
-echo "qMRI outputs saved in: $qmri_output_dir"
-echo "=============================================="
+# Apply coregistration to R2 files if directory specified
+if [[ -n "$r2_directory" ]]; then
+    r2_input_dir="${r2_directory}/${subject}/${session_3T}/anat"
+    if [[ -d "$r2_input_dir" ]]; then
+        apply_coreg_to_files "R2" "$r2_input_dir" \
+            "coreg_${subject}_${session_3T}_*R2map.nii*" # use the R2 map which is co-registered to the PDw space
+    else
+        echo ""
+        echo "WARNING: R2 input directory not found: $r2_input_dir"
+    fi
+fi
+
+# Apply coregistration to R2prime files if directory specified
+if [[ -n "$r2prime_directory" ]]; then
+    r2prime_input_dir="${r2prime_directory}/${subject}/${session_3T}/anat"
+    if [[ -d "$r2prime_input_dir" ]]; then
+        apply_coreg_to_files "R2prime" "$r2prime_input_dir" \
+            "${subject}_${session_3T}_*R2primemap.nii*"
+    else
+        echo ""
+        echo "WARNING: R2prime input directory not found: $r2prime_input_dir"
+    fi
+fi
 
 echo ""
 echo "=== FULL JOB COMPLETED ==="
 echo "PDw coregistration outputs: $intermediate_dir"
-echo "qMRI coregistration outputs: $qmri_output_dir"
+echo "All coregistration outputs: ${output_dir}/${subject}/${session_3T}"
 echo "=========================="
 

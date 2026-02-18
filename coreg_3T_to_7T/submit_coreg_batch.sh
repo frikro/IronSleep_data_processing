@@ -23,6 +23,9 @@ OPTIONS:
     --no-align: skip the initial alignment step (FLIRT applyxfm with usesqform)
     --use-ants: use ANTS SyN (affine + nonlinear) registration instead of FLIRT (affine only)
     --dry-run: show commands that would be executed without actually submitting jobs
+    --qsm-dir DIRECTORY: (optional) Directory containing 3T QSM files to coregister
+    --r2-dir DIRECTORY: (optional) Directory containing 3T R2 files to coregister
+    --r2prime-dir DIRECTORY: (optional) Directory containing 3T R2' (R2prime) files to coregister
 
 ARGUMENTS:
     pdw_3T_directory: Directory containing 3T PDw files (to calculate coregistration)
@@ -43,8 +46,15 @@ DESCRIPTION:
        - FLIRT with mutual information cost function (affine only, default)
        - ANTS SyN registration (affine + nonlinear, if --use-ants flag is used)
     4. Applies the calculated transformation to all qMRI files
+    5. If specified, also applies the transformation to QSM, R2, and/or R2' files
     
     Creates output structure: output/sub-xxx/ses-xx/intermediate/ and output/sub-xxx/ses-xx/
+
+    Expected input directory structures (BIDS-like):
+      qMRI:    <qmri_dir>/<subject>/<session>/anat/<subject>_<session>_{R1map,R2starmap,MTsat,PDmap}.nii*
+      QSM:     <qsm_dir>/<subject>/<session>/anat/coreg_toPDw/<subject>_<session>_mean_Chimap.nii*
+      R2:      <r2_dir>/<subject>/<session>/anat/<subject>_<session>_*R2map.nii*
+      R2prime: <r2prime_dir>/<subject>/<session>/anat/<subject>_<session>_*R2primemap.nii*
 
 EXAMPLES:
     # Auto-discover all subjects and sessions
@@ -73,6 +83,13 @@ EXAMPLES:
     # Use ANTS SyN registration instead of FLIRT
     $(basename $0) --use-ants -sub \"sub-001\" -ses3T \"ses-05\" -refSes \"ses-04\" \\
         /data/pdw_3T /data/pdw_7T /data/qmri_3T /data/output
+    
+    # Also coregister QSM, R2 and R2' data
+    $(basename $0) -sub \"sub-001\" -ses3T \"ses-05\" -refSes \"ses-04\" \\
+        --qsm-dir /data/derivatives/QSM \\
+        --r2-dir /data/derivatives/R2 \\
+        --r2prime-dir /data/derivatives/R2prime \\
+        /data/pdw_3T /data/pdw_7T /data/qmri_3T /data/output
 
 AUTHOR:
     Niklas Kuegler (kuegler@cbs.mpg.de)
@@ -91,6 +108,9 @@ output_dir=""
 subjects=""
 sessions_3T=""
 reference_session=""
+qsm_directory=""
+r2_directory=""
+r2prime_directory=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -126,6 +146,18 @@ while [[ $# -gt 0 ]]; do
         --dry-run)
             dry_run=true
             shift
+            ;;
+        --qsm-dir)
+            qsm_directory="$2"
+            shift 2
+            ;;
+        --r2-dir)
+            r2_directory="$2"
+            shift 2
+            ;;
+        --r2prime-dir)
+            r2prime_directory="$2"
+            shift 2
             ;;
         -*)
             echo "Error: Unknown option $1"
@@ -197,6 +229,21 @@ fi
 if [[ -z "$output_dir" ]]; then
     echo "Error: Output directory must be specified"
     usage
+    exit 1
+fi
+
+if [[ -n "$qsm_directory" ]] && [[ ! -d "$qsm_directory" ]]; then
+    echo "Error: QSM directory does not exist: $qsm_directory"
+    exit 1
+fi
+
+if [[ -n "$r2_directory" ]] && [[ ! -d "$r2_directory" ]]; then
+    echo "Error: R2 directory does not exist: $r2_directory"
+    exit 1
+fi
+
+if [[ -n "$r2prime_directory" ]] && [[ ! -d "$r2prime_directory" ]]; then
+    echo "Error: R2prime directory does not exist: $r2prime_directory"
     exit 1
 fi
 
@@ -334,6 +381,9 @@ fi
 echo "Include alignment step: $include_align_step"
 echo "Use ANTS registration: $use_ants"
 echo "Output directory: $output_dir"
+if [[ -n "$qsm_directory" ]]; then echo "QSM directory: $qsm_directory"; fi
+if [[ -n "$r2_directory" ]]; then echo "R2 directory: $r2_directory"; fi
+if [[ -n "$r2prime_directory" ]]; then echo "R2prime directory: $r2prime_directory"; fi
 
 echo "=========================================="
 echo "Jobs to be submitted:"
@@ -394,7 +444,7 @@ for job_combo in "${job_combinations[@]}"; do
     
     # Prepare SLURM command
     SLURM_PARTITIONS="short,group_servers,gr_weiskopf"
-    slurm_cmd="sbatch -p \"$SLURM_PARTITIONS\" \"$slurm_script\" \"$subject\" \"$session_3T\" \"$ref_session\" \"$pdw_3T_directory\" \"$pdw_7T_directory\" \"$qmri_3T_directory\" \"$output_dir\" \"$include_align_step\" \"$use_ants\""
+    slurm_cmd="sbatch -p \"$SLURM_PARTITIONS\" \"$slurm_script\" \"$subject\" \"$session_3T\" \"$ref_session\" \"$pdw_3T_directory\" \"$pdw_7T_directory\" \"$qmri_3T_directory\" \"$output_dir\" \"$include_align_step\" \"$use_ants\" \"$qsm_directory\" \"$r2_directory\" \"$r2prime_directory\""
     
     if [[ "$dry_run" == "false" ]]; then
         # Submit the job
